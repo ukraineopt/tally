@@ -1,0 +1,13 @@
+{
+  "name": "tally",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "dependencies": {
+    "@anchor-lang/core": "^1.2.2",
+    "@solana/spl-token": "^0.4.15",
+    "@solana/web3.js": "^1.99.0"
+  }
+}
