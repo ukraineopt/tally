@@ -45,6 +45,19 @@ Instructions:
 
 Every step emits an event, so both sides (and any app) can rebuild the full history.
 
+## Web app
+
+`app/` — React + Vite, wallet via Wallet Standard (Phantom, Solflare, Backpack), devnet.
+
+- **Your books:** every ledger where you are supplier or buyer, with what's owed.
+- **Book page:** both parties, live totals (owed now / confirmed / paid / waiting), invoices with role-based actions
+  (supplier: issue, cancel; buyer: confirm, dispute, pay in parts), and the full history decoded from on-chain events.
+- **Read-only link:** anyone can open a book URL without a wallet and see the same numbers.
+
+```bash
+cd app && npm install && npm run dev
+```
+
 ## Run it
 
 ```bash

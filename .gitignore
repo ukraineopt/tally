@@ -5,3 +5,5 @@ test-ledger/
 .DS_Store
 **/*-keypair.json
 keys/
+app/public/__uitest.json
+app/dist/

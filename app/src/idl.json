@@ -1,0 +1,845 @@
+{
+  "address": "Bo7EZvuQN7a9VuxLMtj9nmc6yM1YwQRHtM69CCqBPz2R",
+  "metadata": {
+    "name": "tally",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "docs": [
+    "Tally: a shared, tamper-proof debt book between a supplier and a buyer.",
+    "Supplier issues invoices, buyer confirms the goods arrived (or disputes),",
+    "buyer pays in stablecoins (partially or fully). Both sides read the same numbers."
+  ],
+  "instructions": [
+    {
+      "name": "accept_invoice",
+      "docs": [
+        "Buyer confirms the goods arrived: the invoice becomes debt on the shared book."
+      ],
+      "discriminator": [
+        251,
+        220,
+        98,
+        141,
+        138,
+        145,
+        2,
+        24
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "relations": [
+            "invoice"
+          ]
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancel_invoice",
+      "docs": [
+        "Supplier withdraws an invoice that was never accepted."
+      ],
+      "discriminator": [
+        88,
+        158,
+        54,
+        49,
+        53,
+        26,
+        92,
+        68
+      ],
+      "accounts": [
+        {
+          "name": "supplier",
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "relations": [
+            "invoice"
+          ]
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "dispute_invoice",
+      "docs": [
+        "Buyer disputes an invoice (wrong quantity, damaged goods...). Not counted as debt."
+      ],
+      "discriminator": [
+        10,
+        4,
+        236,
+        98,
+        232,
+        38,
+        60,
+        76
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "relations": [
+            "invoice"
+          ]
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "issue_invoice",
+      "docs": [
+        "Supplier issues an invoice (goods shipped). Not a debt until the buyer accepts it."
+      ],
+      "discriminator": [
+        159,
+        194,
+        249,
+        111,
+        13,
+        163,
+        231,
+        132
+      ],
+      "accounts": [
+        {
+          "name": "supplier",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true
+        },
+        {
+          "name": "invoice",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  111,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.invoice_count",
+                "account": "Ledger"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "name": "due_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "open_ledger",
+      "docs": [
+        "Supplier opens a debt book with a buyer for one stablecoin mint."
+      ],
+      "discriminator": [
+        54,
+        103,
+        189,
+        232,
+        236,
+        251,
+        119,
+        42
+      ],
+      "accounts": [
+        {
+          "name": "supplier",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "buyer"
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "supplier"
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "pay_invoice",
+      "docs": [
+        "Buyer pays an accepted invoice, fully or partially. Tokens go straight",
+        "to the supplier's wallet; the program only records it on the shared book."
+      ],
+      "discriminator": [
+        104,
+        6,
+        62,
+        239,
+        197,
+        206,
+        208,
+        220
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "relations": [
+            "invoice"
+          ]
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "supplier",
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "buyer_token",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "buyer"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "supplier_token",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "supplier"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Invoice",
+      "discriminator": [
+        51,
+        194,
+        250,
+        114,
+        6,
+        104,
+        18,
+        164
+      ]
+    },
+    {
+      "name": "Ledger",
+      "discriminator": [
+        43,
+        41,
+        21,
+        213,
+        180,
+        176,
+        95,
+        32
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "InvoiceAccepted",
+      "discriminator": [
+        59,
+        162,
+        55,
+        137,
+        181,
+        100,
+        73,
+        91
+      ]
+    },
+    {
+      "name": "InvoiceCancelled",
+      "discriminator": [
+        62,
+        68,
+        182,
+        115,
+        197,
+        226,
+        135,
+        244
+      ]
+    },
+    {
+      "name": "InvoiceDisputed",
+      "discriminator": [
+        238,
+        232,
+        225,
+        251,
+        26,
+        254,
+        124,
+        208
+      ]
+    },
+    {
+      "name": "InvoiceIssued",
+      "discriminator": [
+        63,
+        225,
+        173,
+        230,
+        246,
+        121,
+        53,
+        65
+      ]
+    },
+    {
+      "name": "LedgerOpened",
+      "discriminator": [
+        115,
+        6,
+        103,
+        111,
+        89,
+        54,
+        170,
+        69
+      ]
+    },
+    {
+      "name": "PaymentMade",
+      "discriminator": [
+        227,
+        251,
+        123,
+        16,
+        133,
+        220,
+        83,
+        242
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6001,
+      "name": "TextTooLong",
+      "msg": "Text is too long"
+    },
+    {
+      "code": 6002,
+      "name": "BadStatus",
+      "msg": "Invoice is not in the right status for this action"
+    },
+    {
+      "code": 6003,
+      "name": "Overpay",
+      "msg": "Payment exceeds what is left on the invoice"
+    },
+    {
+      "code": 6004,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "Invoice",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "paid",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "InvoiceStatus"
+              }
+            }
+          },
+          {
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "name": "dispute_reason",
+            "type": "string"
+          },
+          {
+            "name": "issued_at",
+            "type": "i64"
+          },
+          {
+            "name": "due_at",
+            "type": "i64"
+          },
+          {
+            "name": "accepted_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvoiceAccepted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvoiceCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvoiceDisputed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "reason",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvoiceIssued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvoiceStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Issued"
+          },
+          {
+            "name": "Accepted"
+          },
+          {
+            "name": "Disputed"
+          },
+          {
+            "name": "Paid"
+          },
+          {
+            "name": "Cancelled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ledger",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "supplier",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice_count",
+            "type": "u64"
+          },
+          {
+            "name": "total_accepted",
+            "docs": [
+              "Sum of invoices the buyer confirmed (real debt)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_paid",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LedgerOpened",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "supplier",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PaymentMade",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "invoice_remaining",
+            "type": "u64"
+          },
+          {
+            "name": "ledger_outstanding",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}
