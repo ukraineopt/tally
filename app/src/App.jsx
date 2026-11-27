@@ -3,7 +3,7 @@ import { useConnection, useAnchorWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { PublicKey } from "@solana/web3.js";
 import {
-  getProgram, myLedgers, ledgerInvoices, ledgerHistory, ledgerPda, invoicePda, mintInfo, tokenBalance,
+  getProgram, myLedgers, ledgerInvoices, ledgerCashClaims, cashClaimPda, ledgerHistory, ledgerPda, invoicePda, mintInfo, tokenBalance,
   toUnits, fromUnits, short, statusOf, USDC_DEVNET, EXPLORER, BN,
 } from "./tally.js";
 
@@ -108,7 +108,7 @@ function Home({ toast }) {
         <ol className="steps">
           <li><b>Supplier issues an invoice.</b> It is not debt yet.</li>
           <li><b>Buyer confirms the goods arrived</b> — or disputes with a reason.</li>
-          <li><b>Buyer pays in USDC</b>, in parts or in full. Debt goes down for both.</li>
+          <li><b>Buyer pays in USDC or cash</b>, in parts. Cash counts only once the supplier confirms it arrived.</li>
         </ol>
       </section>
 
@@ -207,6 +207,7 @@ function LedgerPage({ id, toast }) {
   const [mint, setMint] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [history, setHistory] = useState(null);
+  const [claims, setClaims] = useState([]);
   const [balance, setBalance] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -216,6 +217,7 @@ function LedgerPage({ id, toast }) {
       const m = await mintInfo(connection, acc.mint);
       setL(acc); setMint(m);
       setInvoices(await ledgerInvoices(program, ledger));
+      setClaims(await ledgerCashClaims(program, ledger).catch(() => []));
       ledgerHistory(program, ledger).then(setHistory).catch(() => setHistory("error"));
       if (wallet && acc.buyer.equals(wallet.publicKey)) setBalance(await tokenBalance(connection, wallet.publicKey, acc.mint, m.tokenProgram));
     } catch (e) { setErr(errText(e)); }
@@ -257,6 +259,7 @@ function LedgerPage({ id, toast }) {
           <Stat label="Confirmed by buyer" value={money(accepted, mint.symbol)} />
           <Stat label="Paid" value={money(paid, mint.symbol)} />
           <Stat label="Waiting / disputed" value={money(pending, mint.symbol)} />
+          {claims.length > 0 && <Stat label="Cash waiting for supplier" value={money(claims.reduce((s, c) => s + fromUnits(c.account.amount, d), 0), mint.symbol)} />}
         </div>
         <div className="row-between small">
           <span className="muted">
@@ -283,7 +286,8 @@ function LedgerPage({ id, toast }) {
         <ul className="invoices">
           {invoices.map((inv) => (
             <InvoiceRow key={inv.publicKey.toBase58()} inv={inv} L={L} ledger={ledger} role={role} d={d} sym={mint.symbol}
-              program={program} run={run} tokenProgram={mint.tokenProgram} />
+              program={program} run={run} tokenProgram={mint.tokenProgram}
+              claims={claims.filter((c) => c.account.invoice.equals(inv.publicKey))} />
           ))}
         </ul>
       </section>
@@ -346,7 +350,7 @@ function IssueInvoice({ program, ledger, L, d, run }) {
 
 const STATUS_LABEL = { issued: "Waiting for buyer", accepted: "Confirmed · unpaid", disputed: "Disputed", paid: "Paid", cancelled: "Cancelled" };
 
-function InvoiceRow({ inv, L, ledger, role, d, sym, program, run, tokenProgram }) {
+function InvoiceRow({ inv, L, ledger, role, d, sym, program, run, tokenProgram, claims = [] }) {
   const a = inv.account;
   const st = statusOf(a.status);
   const amount = fromUnits(a.amount, d);
@@ -354,6 +358,8 @@ function InvoiceRow({ inv, L, ledger, role, d, sym, program, run, tokenProgram }
   const left = amount - paid;
   const [payAmt, setPayAmt] = useState("");
   const [reason, setReason] = useState("");
+  const [cashAmt, setCashAmt] = useState("");
+  const [cashNote, setCashNote] = useState("");
   const [mode, setMode] = useState(null);
   const label = st === "accepted" && paid > 0 ? "Partly paid" : STATUS_LABEL[st];
   const n = a.index.toNumber() + 1;
@@ -396,13 +402,58 @@ function InvoiceRow({ inv, L, ledger, role, d, sym, program, run, tokenProgram }
               .accounts({ ...acc, supplier: L.supplier, mint: L.mint, tokenProgram }).rpc()).then(() => setPayAmt(""));
           }}>
             <input type="number" min="0" step="0.01" max={left} value={payAmt} onChange={(e) => setPayAmt(e.target.value)} placeholder={`${left.toFixed(2)} left`} />
-            <button>Pay</button>
+            <button>Pay USDC</button>
+            <button type="button" className="ghost" onClick={() => setMode(mode === "cash" ? null : "cash")}>Paid in cash</button>
           </form>
+        )}
+        {role === "supplier" && st === "accepted" && (
+          <button className="ghost" onClick={() => setMode(mode === "cash" ? null : "cash")}>Cash received</button>
         )}
         {role === "supplier" && (st === "issued" || st === "disputed") && (
           <button className="ghost" onClick={() => run(`Cancel #${n}`, () => program.methods.cancelInvoice().accounts(acc).rpc())}>Cancel invoice</button>
         )}
       </div>
+
+      {claims.length > 0 && (
+        <ul className="claims">
+          {claims.map((c) => (
+            <li key={c.publicKey.toBase58()}>
+              <span className="grow">
+                💵 Buyer says: paid <b>{money(fromUnits(c.account.amount, d), sym)}</b> in cash
+                {c.account.note && <> — “{c.account.note}”</>}
+                <span className="muted small"> · {role === "supplier" ? "did you get it?" : "waiting for supplier to confirm"}</span>
+              </span>
+              {role === "supplier" && (
+                <span className="claim-btns">
+                  <button onClick={() => run("Confirm cash", () => program.methods.confirmCashPayment()
+                    .accounts({ ...acc, claim: c.publicKey, buyer: c.account.buyer }).rpc())}>Got it</button>
+                  <button className="ghost" onClick={() => run("Reject cash", () => program.methods.rejectCashPayment()
+                    .accounts({ ...acc, claim: c.publicKey, buyer: c.account.buyer }).rpc())}>Didn't get it</button>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {mode === "cash" && (
+        <form className="form inline tight cash" onSubmit={(e) => {
+          e.preventDefault();
+          const v = Number(cashAmt);
+          if (!(v > 0)) return;
+          const note = cashNote.slice(0, 64);
+          const call = role === "buyer"
+            ? () => { const nonce = Date.now(); return program.methods.claimCashPayment(new BN(nonce), toUnits(v, d), note)
+                .accounts({ ...acc, claim: cashClaimPda(inv.publicKey, nonce) }).rpc(); }
+            : () => program.methods.recordCashReceived(toUnits(v, d), note).accounts(acc).rpc();
+          run(role === "buyer" ? `Cash ${money(v, sym)} sent for confirmation` : `Cash ${money(v, sym)} recorded`, call)
+            .then(() => { setMode(null); setCashAmt(""); setCashNote(""); });
+        }}>
+          <input type="number" min="0" step="0.01" max={left} value={cashAmt} onChange={(e) => setCashAmt(e.target.value)} placeholder={`Cash amount (${left.toFixed(2)} left)`} required />
+          <input value={cashNote} maxLength={64} onChange={(e) => setCashNote(e.target.value)} placeholder="Note, e.g. handed to driver Nov 24" />
+          <button>{role === "buyer" ? "Ask supplier to confirm" : "Record cash"}</button>
+        </form>
+      )}
 
       {mode === "dispute" && (
         <form className="form inline tight" onSubmit={(e) => {
@@ -427,7 +478,11 @@ function HistoryRow({ h, d, sym, invoices }) {
     invoiceAccepted: () => `Buyer confirmed ${num(D.invoice)} — ${money(fromUnits(D.amount, d), sym)} added to debt`,
     invoiceDisputed: () => `Buyer disputed ${num(D.invoice)}: “${D.reason}”`,
     invoiceCancelled: () => `Supplier cancelled ${num(D.invoice)}`,
-    paymentMade: () => `Buyer paid ${money(fromUnits(D.amount, d), sym)} on ${num(D.invoice)} · debt now ${money(fromUnits(D.ledgerOutstanding, d), sym)}`,
+    cashClaimed: () => `Buyer says paid ${money(fromUnits(D.amount, d), sym)} in cash on ${num(D.invoice)}${D.note ? ` (“${D.note}”)` : ""} — waiting for supplier`,
+    cashConfirmed: () => `Supplier confirmed ${money(fromUnits(D.amount, d), sym)} cash on ${num(D.invoice)} · debt now ${money(fromUnits(D.ledgerOutstanding, d), sym)}`,
+    cashRejected: () => `Supplier did not receive ${money(fromUnits(D.amount, d), sym)} cash on ${num(D.invoice)} — debt unchanged`,
+    cashRecorded: () => `Supplier recorded ${money(fromUnits(D.amount, d), sym)} cash received on ${num(D.invoice)} · debt now ${money(fromUnits(D.ledgerOutstanding, d), sym)}`,
+    paymentMade: () => `Buyer paid USDC ${money(fromUnits(D.amount, d), sym)} on ${num(D.invoice)} · debt now ${money(fromUnits(D.ledgerOutstanding, d), sym)}`,
   }[key];
   return (
     <li>

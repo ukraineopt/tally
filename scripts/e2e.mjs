@@ -83,8 +83,34 @@ log(`buyer paid $200 on #0  tx ${sig}`);
 try { await pay(300, 0); throw new Error("SHOULD HAVE FAILED"); }
 catch (e) { if (String(e).includes("SHOULD")) throw e; log("overpay rejected ✓"); }
 
-sig = await pay(220, 0);
-log(`buyer paid $220 on #0 (closes it)  tx ${sig}`);
+// Cash: buyer claims, supplier confirms or rejects; supplier can also record cash directly.
+const claimPda = (inv, nonce) => PublicKey.findProgramAddressSync(
+  [Buffer.from("cash"), inv.toBuffer(), new BN(nonce).toArrayLike(Buffer, "le", 8)], pid)[0];
+const n1 = Date.now(), n2 = n1 + 1;
+await pb.methods.claimCashPayment(new BN(n1), usd(100), "Cash to driver Nov 24")
+  .accounts({ ledger, invoice: invoicePda(0), claim: claimPda(invoicePda(0), n1) }).rpc();
+let mid = await ps.account.ledger.fetch(ledger);
+if (fmt(mid.totalPaid) !== "200.00") throw new Error("cash claim must not change debt before supplier confirms");
+log("buyer claimed $100 cash — debt unchanged until supplier confirms ✓");
+
+try {
+  await pb.methods.confirmCashPayment().accounts({ supplier: buyer.publicKey, ledger, invoice: invoicePda(0), claim: claimPda(invoicePda(0), n1), buyer: buyer.publicKey }).rpc();
+  throw new Error("SHOULD HAVE FAILED");
+} catch (e) { if (String(e).includes("SHOULD")) throw e; log("buyer confirming own cash rejected ✓"); }
+
+await ps.methods.confirmCashPayment().accounts({ ledger, invoice: invoicePda(0), claim: claimPda(invoicePda(0), n1), buyer: buyer.publicKey }).rpc();
+log("supplier confirmed $100 cash");
+
+await pb.methods.claimCashPayment(new BN(n2), usd(50), "Paid at the market")
+  .accounts({ ledger, invoice: invoicePda(0), claim: claimPda(invoicePda(0), n2) }).rpc();
+await ps.methods.rejectCashPayment().accounts({ ledger, invoice: invoicePda(0), claim: claimPda(invoicePda(0), n2), buyer: buyer.publicKey }).rpc();
+log("buyer claimed $50 cash, supplier rejected (never received)");
+
+await ps.methods.recordCashReceived(usd(20), "Change from last order").accounts({ ledger, invoice: invoicePda(0) }).rpc();
+log("supplier recorded $20 cash received");
+
+sig = await pay(100, 0);
+log(`buyer paid last $100 in USDC (closes it)  tx ${sig}`);
 console.log("supplier", supplier.publicKey.toBase58(), "buyer", buyer.publicKey.toBase58(), "mint", mint.toBase58());
 
 const L = await ps.account.ledger.fetch(ledger);
@@ -97,6 +123,6 @@ console.log("#0", Object.keys(i0.status)[0], "paid", fmt(i0.paid), "/", fmt(i0.a
 console.log("#1", Object.keys(i1.status)[0], "reason:", i1.disputeReason);
 console.log("supplier wallet balance $%s", (Number(supBal.amount) / 10 ** DEC).toFixed(2));
 
-const ok = fmt(L.totalAccepted) === "420.00" && fmt(L.totalPaid) === "420.00" && "paid" in i0.status && "disputed" in i1.status && Number(supBal.amount) === 420 * 10 ** DEC;
+const ok = fmt(L.totalAccepted) === "420.00" && fmt(L.totalPaid) === "420.00" && "paid" in i0.status && "disputed" in i1.status && Number(supBal.amount) === 300 * 10 ** DEC;
 console.log(ok ? "\nALL CHECKS PASSED" : "\nCHECKS FAILED");
 process.exit(ok ? 0 : 1);

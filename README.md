@@ -1,5 +1,7 @@
 # Tally — one shared debt book for supplier and buyer, on Solana
 
+**Live app (devnet):** https://ukraineopt.github.io/tally/
+
 In wholesale, the supplier and the buyer each keep their own notebook of who owes what.
 The two notebooks never match, and every month ends with an argument about the numbers.
 
@@ -10,6 +12,9 @@ The two notebooks never match, and every month ends with an argument about the n
    Only an accepted invoice becomes debt.
 3. **Buyer pays in stablecoins**, fully or in parts. Tokens go straight to the supplier's wallet;
    the program only records the payment and reduces the shared balance.
+4. **Or pays in cash** — most wholesale still runs on cash. Cash can't be verified on-chain, so it only
+   counts once the **supplier confirms** it arrived (the buyer's claim waits until then). The supplier can
+   also record cash received directly.
 
 Neither side can change the book alone: the supplier can't confirm on the buyer's behalf,
 nobody can pay a disputed invoice or overpay, and history can't be rewritten later.
@@ -31,6 +36,7 @@ one half for each side. The halves only fit together if nobody cheated.
 Accounts:
 - `Ledger` — PDA `["ledger", supplier, buyer, mint]`: totals accepted / paid, invoice counter.
 - `Invoice` — PDA `["invoice", ledger, index]`: amount, paid, status, description, dispute reason, dates.
+- `CashClaim` — PDA `["cash", invoice, nonce]`: a buyer's pending cash claim (closed once resolved).
 
 Instructions:
 
@@ -42,6 +48,10 @@ Instructions:
 | `dispute_invoice(reason)` | buyer | `Issued` → `Disputed`, not counted as debt |
 | `cancel_invoice` | supplier | withdraws an invoice that was never accepted |
 | `pay_invoice(amount)` | buyer | partial or full payment, SPL / Token-2022 `transfer_checked` to supplier |
+| `claim_cash_payment(nonce, amount, note)` | buyer | "I paid X in cash" → pending `CashClaim`, debt unchanged |
+| `confirm_cash_payment` | supplier | cash arrived → debt goes down, claim closed (rent back to buyer) |
+| `reject_cash_payment` | supplier | cash never arrived → debt unchanged, claim closed |
+| `record_cash_received(amount, note)` | supplier | supplier records cash directly (the receiver admits it) |
 
 Every step emits an event, so both sides (and any app) can rebuild the full history.
 
@@ -51,7 +61,7 @@ Every step emits an event, so both sides (and any app) can rebuild the full hist
 
 - **Your books:** every ledger where you are supplier or buyer, with what's owed.
 - **Book page:** both parties, live totals (owed now / confirmed / paid / waiting), invoices with role-based actions
-  (supplier: issue, cancel; buyer: confirm, dispute, pay in parts), and the full history decoded from on-chain events.
+  (supplier: issue, cancel, confirm/reject cash, record cash; buyer: confirm, dispute, pay USDC in parts, claim cash), and the full history decoded from on-chain events.
 - **Read-only link:** anyone can open a book URL without a wallet and see the same numbers.
 
 ```bash
@@ -69,15 +79,19 @@ npm install && node scripts/e2e.mjs
 RPC=https://api.devnet.solana.com FUNDER=path/to/devnet-keypair.json node scripts/e2e.mjs
 ```
 
-`scripts/e2e.mjs` runs the whole story (two invoices, accept, dispute, two partial payments)
-and checks that cheating attempts are rejected.
+`scripts/e2e.mjs` runs the whole story (two invoices, accept, dispute, USDC payments, cash claimed/confirmed/rejected/recorded)
+and checks that cheating attempts are rejected (paying a disputed invoice, accepting on the buyer's behalf,
+overpaying, a buyer confirming their own cash).
 
 ## Built before / during the hackathon
 
 Dev3pack Global Hackathon (Nov 27–29, 2026) allows pre-hackathon work if it is disclosed:
 
 - **Before the hackathon (Nov 23–26):** idea, Anchor program, end-to-end test script, devnet deploy, first version of the web app.
-- **During the hackathon (Nov 27–29):** _to be filled in_ — cash payments confirmed by both sides, polish, demo video.
+- **During the hackathon (Nov 27–29):**
+  - Nov 27: cash payments with two-sided confirmation (4 new instructions, `CashClaim` account, events),
+    program upgraded on devnet, cash flow in the web app, web app hosted on GitHub Pages.
+  - _more to come — polish, demo video._
 
 ## About
 

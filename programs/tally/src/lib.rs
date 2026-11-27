@@ -6,6 +6,7 @@ declare_id!("Bo7EZvuQN7a9VuxLMtj9nmc6yM1YwQRHtM69CCqBPz2R");
 
 pub const MAX_DESC: usize = 64;
 pub const MAX_REASON: usize = 64;
+pub const MAX_NOTE: usize = 64;
 
 /// Tally: a shared, tamper-proof debt book between a supplier and a buyer.
 /// Supplier issues invoices, buyer confirms the goods arrived (or disputes),
@@ -127,6 +128,81 @@ pub mod tally {
         });
         Ok(())
     }
+
+    // ---------- cash payments (added during the hackathon) ----------
+    // Most wholesale is still paid in cash. Cash can't be verified on-chain,
+    // so it only reduces the debt when the SUPPLIER (the one receiving it) agrees.
+
+    /// Buyer says "I paid X in cash on this invoice". Pending until the supplier confirms.
+    pub fn claim_cash_payment(ctx: Context<ClaimCash>, nonce: u64, amount: u64, note: String) -> Result<()> {
+        require!(amount > 0, TallyError::ZeroAmount);
+        require!(note.len() <= MAX_NOTE, TallyError::TextTooLong);
+        let inv = &ctx.accounts.invoice;
+        require!(inv.status == InvoiceStatus::Accepted, TallyError::BadStatus);
+        require!(amount <= inv.amount - inv.paid, TallyError::Overpay);
+        let c = &mut ctx.accounts.claim;
+        c.ledger = ctx.accounts.ledger.key();
+        c.invoice = inv.key();
+        c.buyer = ctx.accounts.buyer.key();
+        c.amount = amount;
+        c.note = note.clone();
+        c.nonce = nonce;
+        c.created_at = Clock::get()?.unix_timestamp;
+        c.bump = ctx.bumps.claim;
+        emit!(CashClaimed { ledger: c.ledger, invoice: c.invoice, claim: c.key(), amount, note });
+        Ok(())
+    }
+
+    /// Supplier confirms the cash arrived: debt goes down. Claim account is closed, rent back to buyer.
+    pub fn confirm_cash_payment(ctx: Context<ResolveCash>) -> Result<()> {
+        let amount = ctx.accounts.claim.amount;
+        let inv = &mut ctx.accounts.invoice;
+        let l = &mut ctx.accounts.ledger;
+        apply_payment(l, inv, amount)?;
+        emit!(CashConfirmed {
+            ledger: l.key(),
+            invoice: inv.key(),
+            amount,
+            invoice_remaining: inv.amount - inv.paid,
+            ledger_outstanding: l.total_accepted - l.total_paid,
+        });
+        Ok(())
+    }
+
+    /// Supplier says "I never got this cash". Nothing changes on the debt; claim closed.
+    pub fn reject_cash_payment(ctx: Context<ResolveCash>) -> Result<()> {
+        emit!(CashRejected { ledger: ctx.accounts.ledger.key(), invoice: ctx.accounts.invoice.key(), amount: ctx.accounts.claim.amount });
+        Ok(())
+    }
+
+    /// Supplier records cash they received directly (no buyer claim needed: the receiver admits it).
+    pub fn record_cash_received(ctx: Context<RecordCash>, amount: u64, note: String) -> Result<()> {
+        require!(amount > 0, TallyError::ZeroAmount);
+        require!(note.len() <= MAX_NOTE, TallyError::TextTooLong);
+        let inv = &mut ctx.accounts.invoice;
+        let l = &mut ctx.accounts.ledger;
+        apply_payment(l, inv, amount)?;
+        emit!(CashRecorded {
+            ledger: l.key(),
+            invoice: inv.key(),
+            amount,
+            note,
+            invoice_remaining: inv.amount - inv.paid,
+            ledger_outstanding: l.total_accepted - l.total_paid,
+        });
+        Ok(())
+    }
+}
+
+fn apply_payment(l: &mut Ledger, inv: &mut Invoice, amount: u64) -> Result<()> {
+    require!(inv.status == InvoiceStatus::Accepted, TallyError::BadStatus);
+    require!(amount <= inv.amount - inv.paid, TallyError::Overpay);
+    inv.paid += amount;
+    if inv.paid == inv.amount {
+        inv.status = InvoiceStatus::Paid;
+    }
+    l.total_paid = l.total_paid.checked_add(amount).ok_or(TallyError::Overflow)?;
+    Ok(())
 }
 
 // ---------- accounts ----------
@@ -210,6 +286,49 @@ pub struct PayInvoice<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(nonce: u64)]
+pub struct ClaimCash<'info> {
+    #[account(mut)]
+    pub buyer: Signer<'info>,
+    #[account(has_one = buyer)]
+    pub ledger: Account<'info, Ledger>,
+    #[account(has_one = ledger)]
+    pub invoice: Account<'info, Invoice>,
+    #[account(
+        init,
+        payer = buyer,
+        space = 8 + CashClaim::INIT_SPACE,
+        seeds = [b"cash", invoice.key().as_ref(), &nonce.to_le_bytes()],
+        bump
+    )]
+    pub claim: Account<'info, CashClaim>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ResolveCash<'info> {
+    pub supplier: Signer<'info>,
+    #[account(mut, has_one = supplier)]
+    pub ledger: Account<'info, Ledger>,
+    #[account(mut, has_one = ledger)]
+    pub invoice: Account<'info, Invoice>,
+    #[account(mut, has_one = invoice, has_one = buyer, close = buyer)]
+    pub claim: Account<'info, CashClaim>,
+    /// CHECK: rent refund goes back to the buyer who opened the claim (checked via has_one).
+    #[account(mut)]
+    pub buyer: UncheckedAccount<'info>,
+}
+
+#[derive(Accounts)]
+pub struct RecordCash<'info> {
+    pub supplier: Signer<'info>,
+    #[account(mut, has_one = supplier)]
+    pub ledger: Account<'info, Ledger>,
+    #[account(mut, has_one = ledger)]
+    pub invoice: Account<'info, Invoice>,
+}
+
 // ---------- state ----------
 
 #[account]
@@ -244,6 +363,21 @@ pub struct Invoice {
     pub bump: u8,
 }
 
+/// A buyer's "I paid in cash" claim, waiting for the supplier.
+#[account]
+#[derive(InitSpace)]
+pub struct CashClaim {
+    pub ledger: Pubkey,
+    pub invoice: Pubkey,
+    pub buyer: Pubkey,
+    pub amount: u64,
+    #[max_len(MAX_NOTE)]
+    pub note: String,
+    pub nonce: u64,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace, Debug)]
 pub enum InvoiceStatus {
     Issued,
@@ -270,6 +404,28 @@ pub struct PaymentMade {
     pub ledger: Pubkey,
     pub invoice: Pubkey,
     pub amount: u64,
+    pub invoice_remaining: u64,
+    pub ledger_outstanding: u64,
+}
+
+#[event]
+pub struct CashClaimed { pub ledger: Pubkey, pub invoice: Pubkey, pub claim: Pubkey, pub amount: u64, pub note: String }
+#[event]
+pub struct CashConfirmed {
+    pub ledger: Pubkey,
+    pub invoice: Pubkey,
+    pub amount: u64,
+    pub invoice_remaining: u64,
+    pub ledger_outstanding: u64,
+}
+#[event]
+pub struct CashRejected { pub ledger: Pubkey, pub invoice: Pubkey, pub amount: u64 }
+#[event]
+pub struct CashRecorded {
+    pub ledger: Pubkey,
+    pub invoice: Pubkey,
+    pub amount: u64,
+    pub note: String,
     pub invoice_remaining: u64,
     pub ledger_outstanding: u64,
 }

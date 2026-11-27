@@ -86,6 +86,135 @@
       "args": []
     },
     {
+      "name": "claim_cash_payment",
+      "docs": [
+        "Buyer says \"I paid X in cash on this invoice\". Pending until the supplier confirms."
+      ],
+      "discriminator": [
+        249,
+        187,
+        44,
+        166,
+        167,
+        61,
+        249,
+        251
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "relations": [
+            "invoice"
+          ]
+        },
+        {
+          "name": "invoice"
+        },
+        {
+          "name": "claim",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  115,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "invoice"
+              },
+              {
+                "kind": "arg",
+                "path": "nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "note",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "confirm_cash_payment",
+      "docs": [
+        "Supplier confirms the cash arrived: debt goes down. Claim account is closed, rent back to buyer."
+      ],
+      "discriminator": [
+        240,
+        30,
+        87,
+        14,
+        240,
+        145,
+        169,
+        226
+      ],
+      "accounts": [
+        {
+          "name": "supplier",
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "relations": [
+            "invoice"
+          ]
+        },
+        {
+          "name": "invoice",
+          "writable": true,
+          "relations": [
+            "claim"
+          ]
+        },
+        {
+          "name": "claim",
+          "writable": true
+        },
+        {
+          "name": "buyer",
+          "writable": true,
+          "relations": [
+            "claim"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "dispute_invoice",
       "docs": [
         "Buyer disputes an invoice (wrong quantity, damaged goods...). Not counted as debt."
@@ -449,9 +578,119 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "record_cash_received",
+      "docs": [
+        "Supplier records cash they received directly (no buyer claim needed: the receiver admits it)."
+      ],
+      "discriminator": [
+        114,
+        90,
+        255,
+        50,
+        103,
+        102,
+        109,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "supplier",
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "relations": [
+            "invoice"
+          ]
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "note",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "reject_cash_payment",
+      "docs": [
+        "Supplier says \"I never got this cash\". Nothing changes on the debt; claim closed."
+      ],
+      "discriminator": [
+        2,
+        199,
+        31,
+        73,
+        115,
+        48,
+        124,
+        146
+      ],
+      "accounts": [
+        {
+          "name": "supplier",
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "relations": [
+            "invoice"
+          ]
+        },
+        {
+          "name": "invoice",
+          "writable": true,
+          "relations": [
+            "claim"
+          ]
+        },
+        {
+          "name": "claim",
+          "writable": true
+        },
+        {
+          "name": "buyer",
+          "writable": true,
+          "relations": [
+            "claim"
+          ]
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
+    {
+      "name": "CashClaim",
+      "discriminator": [
+        168,
+        47,
+        33,
+        9,
+        250,
+        145,
+        37,
+        18
+      ]
+    },
     {
       "name": "Invoice",
       "discriminator": [
@@ -480,6 +719,58 @@
     }
   ],
   "events": [
+    {
+      "name": "CashClaimed",
+      "discriminator": [
+        226,
+        26,
+        184,
+        184,
+        188,
+        185,
+        123,
+        253
+      ]
+    },
+    {
+      "name": "CashConfirmed",
+      "discriminator": [
+        116,
+        66,
+        84,
+        108,
+        91,
+        192,
+        169,
+        255
+      ]
+    },
+    {
+      "name": "CashRecorded",
+      "discriminator": [
+        123,
+        222,
+        29,
+        205,
+        136,
+        106,
+        116,
+        150
+      ]
+    },
+    {
+      "name": "CashRejected",
+      "discriminator": [
+        7,
+        65,
+        140,
+        95,
+        165,
+        10,
+        102,
+        116
+      ]
+    },
     {
       "name": "InvoiceAccepted",
       "discriminator": [
@@ -587,6 +878,157 @@
     }
   ],
   "types": [
+    {
+      "name": "CashClaim",
+      "docs": [
+        "A buyer's \"I paid in cash\" claim, waiting for the supplier."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "note",
+            "type": "string"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CashClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "claim",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "note",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CashConfirmed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "invoice_remaining",
+            "type": "u64"
+          },
+          {
+            "name": "ledger_outstanding",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CashRecorded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "note",
+            "type": "string"
+          },
+          {
+            "name": "invoice_remaining",
+            "type": "u64"
+          },
+          {
+            "name": "ledger_outstanding",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CashRejected",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
     {
       "name": "Invoice",
       "type": {

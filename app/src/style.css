@@ -92,3 +92,12 @@ details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .foot { margin-top: 30px; color: var(--muted); font-size: 13px; text-align: center; }
 .wallet-adapter-button { height: 40px; border-radius: 10px; font-size: 14px; }
 .wallet-adapter-button-trigger { background: var(--ink); color: var(--bg); }
+.inv-actions .form.inline { grid-template-columns: 140px auto auto; }
+.form.cash { grid-template-columns: 1fr; }
+@media (min-width: 640px) { .form.cash { grid-template-columns: 200px 1fr auto; } }
+.claims { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+.claims li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 10%, transparent); font-size: 14px; }
+.claim-btns { display: flex; gap: 6px; }
+.dot.cashClaimed { background: var(--warn); } .dot.cashConfirmed, .dot.cashRecorded { background: var(--ok); } .dot.cashRejected { background: var(--bad); }
+.totals:has(.stat:nth-child(5)) { grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr; }
+@media (max-width: 640px) { .totals:has(.stat:nth-child(5)) { grid-template-columns: 1fr 1fr; } }

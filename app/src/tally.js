@@ -47,6 +47,15 @@ export async function ledgerInvoices(program, ledger) {
   return list.sort((a, b) => b.account.index.toNumber() - a.account.index.toNumber());
 }
 
+export const cashClaimPda = (invoice, nonce) =>
+  PublicKey.findProgramAddressSync(
+    [Buffer.from("cash"), invoice.toBuffer(), new BN(nonce).toArrayLike(Buffer, "le", 8)], PROGRAM_ID)[0];
+
+// Pending "I paid in cash" claims (closed on-chain once the supplier confirms or rejects).
+export async function ledgerCashClaims(program, ledger) {
+  return program.account.cashClaim.all([{ memcmp: { offset: 8, bytes: ledger.toBase58() } }]);
+}
+
 const mintCache = new Map();
 export async function mintInfo(connection, mint) {
   const key = mint.toBase58();
