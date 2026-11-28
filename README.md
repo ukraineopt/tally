@@ -3,7 +3,7 @@
 **Live app (devnet):** https://ukraineopt.github.io/tally/
 
 In wholesale, the supplier and the buyer each keep their own notebook of who owes what.
-The two notebooks never match, and every month ends with an argument about the numbers.
+When the two records don't match, the sides reconcile them by hand, and there is no one to say who's right.
 
 **Tally** replaces the two notebooks with one book that both sides sign:
 
@@ -91,7 +91,8 @@ Dev3pack Global Hackathon (Nov 27–29, 2026) allows pre-hackathon work if it is
 - **During the hackathon (Nov 27–29):**
   - Nov 27: cash payments with two-sided confirmation (4 new instructions, `CashClaim` account, events),
     program upgraded on devnet, cash flow in the web app, web app hosted on GitHub Pages.
-  - _more to come — polish, demo video._
+  - Nov 28: Token-2022 mints show their own on-chain symbol (demo uses a test stablecoin `tUSDC`),
+    `scripts/demo_setup.mjs` for demo data, copy fixes, demo video (full flow recorded on devnet).
 
 ## About
 

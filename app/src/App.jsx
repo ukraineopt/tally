@@ -102,13 +102,13 @@ function Home({ toast }) {
       <section className="hero">
         <h1>Two notebooks never match.<br />One shared book does.</h1>
         <p className="lead">
-          In wholesale the supplier and the buyer each keep their own record of who owes what — and every month
-          ends with an argument. Tally keeps one debt book on Solana that both sides sign.
+          In wholesale the supplier and the buyer each keep their own record of who owes what, and they
+          reconcile the two by hand. Tally keeps one debt book on Solana that both sides sign.
         </p>
         <ol className="steps">
           <li><b>Supplier issues an invoice.</b> It is not debt yet.</li>
           <li><b>Buyer confirms the goods arrived</b> — or disputes with a reason.</li>
-          <li><b>Buyer pays in USDC or cash</b>, in parts. Cash counts only once the supplier confirms it arrived.</li>
+          <li><b>Buyer pays in USDC or cash.</b> In parts is fine. Cash counts only once the supplier confirms it arrived.</li>
         </ol>
       </section>
 
@@ -402,7 +402,7 @@ function InvoiceRow({ inv, L, ledger, role, d, sym, program, run, tokenProgram, 
               .accounts({ ...acc, supplier: L.supplier, mint: L.mint, tokenProgram }).rpc()).then(() => setPayAmt(""));
           }}>
             <input type="number" min="0" step="0.01" max={left} value={payAmt} onChange={(e) => setPayAmt(e.target.value)} placeholder={`${left.toFixed(2)} left`} />
-            <button>Pay USDC</button>
+            <button>Pay {sym}</button>
             <button type="button" className="ghost" onClick={() => setMode(mode === "cash" ? null : "cash")}>Paid in cash</button>
           </form>
         )}
@@ -482,7 +482,7 @@ function HistoryRow({ h, d, sym, invoices }) {
     cashConfirmed: () => `Supplier confirmed ${money(fromUnits(D.amount, d), sym)} cash on ${num(D.invoice)} · debt now ${money(fromUnits(D.ledgerOutstanding, d), sym)}`,
     cashRejected: () => `Supplier did not receive ${money(fromUnits(D.amount, d), sym)} cash on ${num(D.invoice)} — debt unchanged`,
     cashRecorded: () => `Supplier recorded ${money(fromUnits(D.amount, d), sym)} cash received on ${num(D.invoice)} · debt now ${money(fromUnits(D.ledgerOutstanding, d), sym)}`,
-    paymentMade: () => `Buyer paid USDC ${money(fromUnits(D.amount, d), sym)} on ${num(D.invoice)} · debt now ${money(fromUnits(D.ledgerOutstanding, d), sym)}`,
+    paymentMade: () => `Buyer paid ${money(fromUnits(D.amount, d), sym)} on-chain on ${num(D.invoice)} · debt now ${money(fromUnits(D.ledgerOutstanding, d), sym)}`,
   }[key];
   return (
     <li>

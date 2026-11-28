@@ -1,7 +1,7 @@
 // Thin client for the Tally program.
 import { AnchorProvider, Program, BN, BorshCoder, EventParser } from "@anchor-lang/core";
 import { PublicKey, Keypair } from "@solana/web3.js";
-import { getMint, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import { getMint, getAssociatedTokenAddressSync, getTokenMetadata, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import idl from "./idl.json";
 
 
@@ -63,7 +63,12 @@ export async function mintInfo(connection, mint) {
   const acc = await connection.getAccountInfo(mint);
   const tokenProgram = acc?.owner?.equals(TOKEN_2022_PROGRAM_ID) ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
   const m = await getMint(connection, mint, "confirmed", tokenProgram);
-  const info = { decimals: m.decimals, tokenProgram, symbol: mint.equals(USDC_DEVNET) ? "USDC" : "tokens" };
+  let symbol = mint.equals(USDC_DEVNET) ? "USDC" : "tokens";
+  // Token-2022 mints can carry their own name/symbol on-chain.
+  if (tokenProgram.equals(TOKEN_2022_PROGRAM_ID)) {
+    try { const md = await getTokenMetadata(connection, mint, "confirmed"); if (md?.symbol) symbol = md.symbol; } catch { /* no metadata */ }
+  }
+  const info = { decimals: m.decimals, tokenProgram, symbol };
   mintCache.set(key, info);
   return info;
 }
